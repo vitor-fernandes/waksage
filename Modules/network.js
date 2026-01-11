@@ -1,4 +1,4 @@
-import { createLightNode} from "@waku/sdk";
+import { createLightNode, Protocols} from "@waku/sdk";
 import protobuf from "protobufjs";
 import {CONTENT_TOPIC_PRIV_MSG} from "./constants.js";
 import { generatePrivateKey, getPublicKey } from "@waku/message-encryption";
@@ -8,14 +8,15 @@ import { createSendMessagePayload, decodeMessage } from "./messages.js";
 
 export const startUpNode = async () => {
     console.info("[*] Initializing the Node [*]");
-    global.wakuNode = await createLightNode({ defaultBootstrap: true });
-    await global.wakuNode.start();
+    let node = await createLightNode({ defaultBootstrap: true, });
+    await node.start();
     console.info("[+] Node Initialized [+]");
     console.info("[*] Waiting for Peers [*]");
 
-    // Wait for connection with peers
-    await global.wakuNode.waitForPeers();
+    await node.waitForPeers([Protocols.LightPush, Protocols.Filter], 10000);
     console.info("[+] Peers Connected [+]");
+
+    return node;
 }
 
 export const createSubscribers = async () => {
@@ -36,34 +37,22 @@ export const createSubscribers = async () => {
 
   // Retrieve messages from Store peers
   console.log("retrieving msgs from store");
-  await global.wakuNode.store.queryWithOrderedCallback([decoder], callback);
+  //await global.wakuNode.store.queryWithOrderedCallback([decoder], callback);
 }
 
 export const sendMessage = async (message, receiverPubKey) => {
-    const callback = async (wakuMessage) => {
-    console.log("Received Message: ", wakuMessage);
-    // Check if there is a payload on the message
-    if (!wakuMessage) return;
-    
-    await decodeMessage(wakuMessage.payload);
-  };  
-  
-  // Create an ECIES message encoder
     const encoder = createEncoder({
-        contentTopic: CONTENT_TOPIC_PRIV_MSG, // message content topic
-        publicKey: global.me.publicKeyBytes, // Receiver Public Key
-        sigPrivKey: global.me.privateKeyBytes, // Sender Private Key
+        contentTopic: CONTENT_TOPIC_PRIV_MSG,
+        publicKey: hexToBytes(receiverPubKey),
+        sigPrivKey: global.me.privateKeyBytes,
     });
 
     let serialisedMessage = await createSendMessagePayload(message, global.me.publicKeyBytes);
 
-    await global.wakuNode.filter.subscribe([encoder], callback);
-
-    let res = await global.wakuNode.lightPush.send(encoder, {
+    await global.wakuNode.lightPush.send(encoder, {
       payload: serialisedMessage,
     });
-
-    console.log("Result sendMessage: ", res);
+    console.log("Message Sent!");
 }
 
 const test = async() => {
@@ -74,7 +63,7 @@ const test = async() => {
   const privateKey2 = generatePrivateKey();
   const publicKey2 = getPublicKey(privateKey2);
 
-  await startUpNode();
+  let node = await startUpNode();
 
   const callback = async (wakuMessage) => {
     console.log("Received Message: ", wakuMessage);
@@ -87,7 +76,8 @@ const test = async() => {
   // Create an ECIES message decoder with the receiver private Key
   const decoder = createDecoder(CONTENT_TOPIC_PRIV_MSG, privateKey2);
 
-  await global.wakuNode.filter.subscribe([decoder], callback);
+  await node.filter.subscribe([decoder], callback);
+  await node.filter.start();
 
   await sendMessage("This is my message", publicKey2, privateKey1, publicKey1);
 }

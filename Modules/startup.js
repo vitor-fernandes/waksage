@@ -5,7 +5,7 @@ export const configureEnvironment = async() => {
     // Create the Accounts directory
     await startupAccountsDirectory();
     // Start the Waku Node
-    await startUpNode();
+    global.wakuNode = await startUpNode();
 }
 
 export const createDecoderandSubscriber = async() => {

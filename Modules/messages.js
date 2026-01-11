@@ -1,5 +1,6 @@
 import protobuf from "protobufjs";
 import { PROTO_FILE } from "./constants.js";
+import { bytesToHex } from "@waku/utils/bytes";
 
 const rootBuf = protobuf.loadSync(PROTO_FILE);
 
@@ -7,7 +8,7 @@ const createMessage = async (message, senderPubKey) => {
   const Message = rootBuf.lookupType("waksage.Message");
   let payload = {
     timestamp: Date.now(),
-    sender: senderPubKey.toString("hex"),
+    sender: bytesToHex(senderPubKey),
     message
   };
 

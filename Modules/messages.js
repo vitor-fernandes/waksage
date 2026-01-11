@@ -41,18 +41,21 @@ export const createSendMessagePayload = async (message, senderPubKey) => {
   }
 
   let createdMessage = PayloadType.create(payload);
-
   const encodedMessage = PayloadType.encode(createdMessage).finish();
-
+  
   return encodedMessage;
 }
 
 const formatReceivedMessage = async (receivedMessage) => {
   
+  // Filter the friend list to get the sender;
+  let friend = global.me.friends.filter(fr => fr.publicKey == receivedMessage.message.sender);
+
   let formattedMsg = {
     date: new Date(receivedMessage.message.timestamp * 1).toLocaleString(),
-    from: receivedMessage.message.sender,
+    from: friend[0] != undefined ? friend[0].name : receivedMessage.message.sender,
     message: receivedMessage.message.message,
+    fromFriend: friend[0] != undefined
   };
 
   return formattedMsg;
@@ -60,10 +63,8 @@ const formatReceivedMessage = async (receivedMessage) => {
 
 export const decodeMessage = async (payload) => {
   let PayloadType = rootBuf.lookupType("waksage.Payload");
-
   let decoded = PayloadType.decode(payload).toJSON();
-  
   let formattedMessage = await formatReceivedMessage(decoded);
-  
-  console.log(formattedMessage);
+
+  return formattedMessage;
 }

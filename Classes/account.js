@@ -105,6 +105,10 @@ export class Account {
         this.#friends.push(friend);
     }
 
+    getFriend(friendName) {
+        return this.#friends.filter(friend => friend.name == friendName)[0];
+    }
+
     getAccount() {
         return {
             id: this.#id,

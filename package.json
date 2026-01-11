@@ -1,0 +1,19 @@
+{
+  "name": "waksage",
+  "version": "1.0.0",
+  "description": "A privacy-based P2P messaging application",
+  "license": "ISC",
+  "author": "Vitor Fernandes",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@waku/message-encryption": "^0.0.33",
+    "@waku/sdk": "^0.0.36",
+    "@waku/utils": "^0.0.23",
+    "protobufjs": "^8.0.0",
+    "readline-sync": "^1.4.10"
+  }
+}

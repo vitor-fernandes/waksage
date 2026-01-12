@@ -1,5 +1,7 @@
 import { Group } from "../Classes/group.js";
 import { decodeMessage } from "./messages.js";
+import { symmetric } from "@waku/message-encryption/crypto";
+import { hexToBytes } from "@waku/utils/bytes";
 
 export const parseReceivedMessage = async (receivedMessage) => {
     return await decodeMessage(receivedMessage);
@@ -7,6 +9,9 @@ export const parseReceivedMessage = async (receivedMessage) => {
 
 export const processReceivedMessage = async (parsedMsg) => {
     try {
+        let timestamp = parsedMsg.timestamp;
+        let from = parsedMsg.from;
+
         let parsedMessageContent = JSON.parse(parsedMsg.message);
         let msgType = parsedMessageContent.type;
         let msg = parsedMessageContent.message;
@@ -16,7 +21,11 @@ export const processReceivedMessage = async (parsedMsg) => {
                 await processGroupInvite(msg);
                 break;
             case "GROUP-MESSAGE":
-                await processGroupMessage(msg);
+                let groupId = parsedMsg.to
+                let response = await processGroupMessage(groupId, msg, from, timestamp);
+                if(response) {
+                    console.log(response);
+                }
                 break;
             default:
                 console.log(`Unsupported msgType: ${msgType}`);
@@ -84,11 +93,29 @@ const processGroupInvite = async (data) => {
     }
 }
 
-const processGroupMessage = async (data) => {
-    /*
-    // Decrypt Group Message with the Group Secret
-    let decr = await symmetric.decrypt(hexToBytes(group.iv), Buffer.from(group.secret), hexToBytes(encr));
-    */
-   return false;
-}
+const processGroupMessage = async (groupId, data, from ,timestamp) => {
+    let groupInfo = global.me.getGroupById(groupId);
 
+    if(!groupInfo) {
+        return false;
+    }
+    try {
+        // Decrypt Group Message with the Group Secret
+        let decryptedContent = Buffer.from(await symmetric.decrypt(hexToBytes(groupInfo.iv), hexToBytes(groupInfo.secret), hexToBytes(data))).toString();
+
+        return {
+            type: "GROUP-MESSAGE",
+            message: {
+                from,
+                group: groupInfo.name,
+                timestamp,
+                content: decryptedContent
+            }
+        };
+    }
+    catch (error) {
+        console.error(`Error in ${import.meta.url} - processGroupMessage()`);
+        console.error(error);
+        return false;
+    }
+}

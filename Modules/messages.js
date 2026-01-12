@@ -2,6 +2,9 @@ import protobuf from "protobufjs";
 import { PROTO_FILE } from "./constants.js";
 import { bytesToHex } from "@waku/utils/bytes";
 
+// TODO: Should this be a class?
+// IDEA: As a class it can be more easly to understand and deal with encodings, patterns, etc.
+
 const rootBuf = protobuf.loadSync(PROTO_FILE);
 
 const createMessage = async (message, to, senderPubKey) => {

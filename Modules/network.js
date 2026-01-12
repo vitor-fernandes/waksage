@@ -3,10 +3,10 @@ import {CONTENT_TOPIC_PRIV_MSG} from "./constants.js";
 import { createEncoder, createDecoder } from "@waku/message-encryption/ecies";
 import { bytesToHex, hexToBytes } from "@waku/utils/bytes";
 import { createSendMessagePayload } from "./messages.js";
-import { deriveKey } from "./crypt.js";
 import { parseReceivedMessage, processReceivedMessage } from "./messageParser.js";
 import { verifyMessageSignature } from "./securityChecker.js";
 import { Group } from "../Classes/group.js";
+import { symmetric } from "@waku/message-encryption/crypto";
 
 export const startUpNode = async () => {
     console.info("[*] Initializing the Node [*]");
@@ -56,22 +56,22 @@ export const createNewGroup = async (groupName, membersPubKeys) => {
   });
 }
 
-export const sendGroupMessage = async (message, groupName) => {
+export const sendGroupMessage = async (groupName, message) => {
   let groupInfo = global.me.getGroupByName(groupName);
 
   if(!groupInfo) {
     console.log(`The group ${groupName} not found`);
   }
 
-  groupInfo.members.forEach(member => {
+  groupInfo.members.forEach(async (member) => {
     // Skip the current user
     if(member != global.me.publicKey) {
 
       // Symmetric Encryption of the content message
-      let encryptedMessage = bytesToHex(symmetric.encrypt(
+      let encryptedMessage = bytesToHex(await symmetric.encrypt(
         hexToBytes(groupInfo.iv), 
         hexToBytes(groupInfo.secret),
-        message
+        Buffer.from(message)
       ));
 
       let messageBody = JSON.stringify({type: "GROUP-MESSAGE", message: encryptedMessage});
@@ -99,7 +99,6 @@ export const sendMessage = async (message, to, receiverPubKey) => {
 const onMessageReceived = async(wakuMessage) => {
   // TODO: Create a mechanism to avoid duplicate messages arriving
   // IDEA: Calculate a sha256(timestamp_sent|receiverPubKey|contentTopic|sha56(message payload)) and store it in cache before processing the content
-  console.log(`Received a new message!`);
   
   if(!wakuMessage) return;
   else if (!wakuMessage.payload) return;

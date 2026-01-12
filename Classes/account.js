@@ -122,8 +122,16 @@ export class Account {
         return this.#friends.filter(friend => friend.name == friendName)[0];
     }
 
+    getFriendNameFromPublicKey(friendPublicKey) {
+        return this.#friends.filter(friend => friend.publicKey == friendPublicKey)[0];
+    }
+
     getGroupByName(groupName) {
         return this.#groups.filter(group => group.name == groupName)[0];
+    }
+
+    getGroupById(groupId) {
+        return this.#groups.filter(group => group.id == groupId)[0];
     }
 
     getAccount() {

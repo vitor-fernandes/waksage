@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { Account } from "../Classes/account.js";
-import { createNewGroup, sendMessage } from "./network.js";
+import { createNewGroup, sendMessage, sendGroupMessage } from "./network.js";
 
 const banner = () => {
     console.log("");

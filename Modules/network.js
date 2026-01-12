@@ -2,7 +2,11 @@ import { createLightNode, Protocols} from "@waku/sdk";
 import {CONTENT_TOPIC_PRIV_MSG} from "./constants.js";
 import { createEncoder, createDecoder } from "@waku/message-encryption/ecies";
 import { bytesToHex, hexToBytes } from "@waku/utils/bytes";
-import { createSendMessagePayload, decodeMessage } from "./messages.js";
+import { createSendMessagePayload } from "./messages.js";
+import { deriveKey } from "./crypt.js";
+import { parseReceivedMessage, processReceivedMessage } from "./messageParser.js";
+import { verifyMessageSignature } from "./securityChecker.js";
+import { Group } from "../Classes/group.js";
 
 export const startUpNode = async () => {
     console.info("[*] Initializing the Node [*]");
@@ -25,19 +29,66 @@ export const createSubscribers = async () => {
   if(!success) {
     console.error("Error subscribing to the topic: ", success);
   }
+  // TODO: Allow users to recover received messages while they were offline
   // Retrieve messages from Store peers
   //console.log("retrieving msgs from store");
   //await global.wakuNode.store.queryWithOrderedCallback([decoder], callback);
 }
 
-export const sendMessage = async (message, receiverPubKey) => {
+export const createNewGroup = async (groupName, membersPubKeys) => {
+  let newGroup = new Group("", groupName, membersPubKeys, "", "", true);
+
+  // Add group to account
+  await global.me.joinGroup(newGroup);
+
+  console.log(`Group ${newGroup.name} created`);
+
+  // Create the GROUP-INVITE message
+  // Contains all information about the newGroup
+  let messageBody = JSON.stringify({type: "GROUP-INVITE", message: newGroup.toString()});
+
+  // Send the invite to each member
+  newGroup.members.forEach(member => {
+    // Skip the current user
+    if(member != global.me.publicKey) {
+      sendMessage(messageBody, member, member);
+    }
+  });
+}
+
+export const sendGroupMessage = async (message, groupName) => {
+  let groupInfo = global.me.getGroupByName(groupName);
+
+  if(!groupInfo) {
+    console.log(`The group ${groupName} not found`);
+  }
+
+  groupInfo.members.forEach(member => {
+    // Skip the current user
+    if(member != global.me.publicKey) {
+
+      // Symmetric Encryption of the content message
+      let encryptedMessage = bytesToHex(symmetric.encrypt(
+        hexToBytes(groupInfo.iv), 
+        hexToBytes(groupInfo.secret),
+        message
+      ));
+
+      let messageBody = JSON.stringify({type: "GROUP-MESSAGE", message: encryptedMessage});
+      // Don't need to be awaited to send the messages
+      sendMessage(messageBody, groupInfo.id, member)
+    }
+  });
+}
+
+export const sendMessage = async (message, to, receiverPubKey) => {
     const encoder = createEncoder({
         contentTopic: CONTENT_TOPIC_PRIV_MSG,
         publicKey: hexToBytes(receiverPubKey),
         sigPrivKey: global.me.privateKeyBytes,
     });
 
-    let serialisedMessage = await createSendMessagePayload(message, global.me.publicKeyBytes);
+    let serialisedMessage = await createSendMessagePayload(message, to, global.me.publicKeyBytes);
 
     await global.wakuNode.lightPush.send(encoder, {
       payload: serialisedMessage,
@@ -46,25 +97,20 @@ export const sendMessage = async (message, receiverPubKey) => {
 }
 
 const onMessageReceived = async(wakuMessage) => {
+  // TODO: Create a mechanism to avoid duplicate messages arriving
+  // IDEA: Calculate a sha256(timestamp_sent|receiverPubKey|contentTopic|sha56(message payload)) and store it in cache before processing the content
   console.log(`Received a new message!`);
   
   if(!wakuMessage) return;
   else if (!wakuMessage.payload) return;
+
+  let parsedMsg = await parseReceivedMessage(wakuMessage.payload);
+  let isValidSignature = await verifyMessageSignature(wakuMessage, parsedMsg);
+
+  if(!isValidSignature) {
+    return;
+  }
+
+  await processReceivedMessage(parsedMsg);
   
-  const msgSignaturePublicKey = bytesToHex(wakuMessage.signaturePublicKey);
-
-  let msg = await decodeMessage(wakuMessage.payload);
-
-  // Get the publicKey from friend
-  // or use the publicKey inside the from parameter
-  let msgFromPubKey = msg.fromFriend ? global.me.getFriend(msg.from).publicKey : msg.from;
-
-  // Verify the signature of the message
-  // and check if the message signer is the same of payload 
-  if(!wakuMessage.verifySignature(hexToBytes(msgFromPubKey)) || msgFromPubKey != msgSignaturePublicKey) {
-    console.log(`The user ${msgFromPubKey} is trying to impersonate ${msg.from}`); 
-  }
-  else {
-    console.log(msg);
-  }
 }

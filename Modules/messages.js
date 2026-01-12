@@ -4,28 +4,45 @@ import { bytesToHex } from "@waku/utils/bytes";
 
 const rootBuf = protobuf.loadSync(PROTO_FILE);
 
-const createMessage = async (message, senderPubKey) => {
-  const Message = rootBuf.lookupType("waksage.Message");
-  let payload = {
+const createMessage = async (message, to, senderPubKey) => {
+  const MessageBody = rootBuf.lookupType("waksage.MessageBody");
+
+  let messageBodyPayload = {
+    to,
+    content: message
+  }
+
+  let messageBodyError = MessageBody.verify(messageBodyPayload);
+  if(messageBodyError) {
+    console.error(`[-] Error creating MessageBody [-]`);
+    console.error(messageBodyError);
+    process.exit(1);
+  }
+
+  let createdMessageBodyPayload = MessageBody.create(messageBodyPayload);
+
+  let messagePayload = {
     timestamp: Date.now(),
     sender: bytesToHex(senderPubKey),
-    message
+    body: createdMessageBodyPayload
   };
 
-  let error = Message.verify(payload);
+  const Message = rootBuf.lookupType("waksage.Message");
+
+  let error = Message.verify(messagePayload);
   if(error) {
     console.error(`[-] Error creating private message [-]`);
     console.error(error);
     process.exit(1);
   }
 
-  let createdMessage = Message.create(payload);
+  let createdMessage = Message.create(messagePayload);
   
   return createdMessage;
 }
 
-export const createSendMessagePayload = async (message, senderPubKey) => {
-  let messageProt = await createMessage(message, senderPubKey);
+export const createSendMessagePayload = async (message, to, senderPubKey) => {
+  let messageProt = await createMessage(message, to, senderPubKey);
   
   let PayloadType = rootBuf.lookupType("waksage.Payload");
 
@@ -42,7 +59,7 @@ export const createSendMessagePayload = async (message, senderPubKey) => {
 
   let createdMessage = PayloadType.create(payload);
   const encodedMessage = PayloadType.encode(createdMessage).finish();
-  
+
   return encodedMessage;
 }
 
@@ -54,7 +71,8 @@ const formatReceivedMessage = async (receivedMessage) => {
   let formattedMsg = {
     date: new Date(receivedMessage.message.timestamp * 1).toLocaleString(),
     from: friend[0] != undefined ? friend[0].name : receivedMessage.message.sender,
-    message: receivedMessage.message.message,
+    to: receivedMessage.message.body.to,
+    message: receivedMessage.message.body.content,
     fromFriend: friend[0] != undefined
   };
 

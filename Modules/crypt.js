@@ -2,7 +2,7 @@ import { createCipheriv, randomBytes, createDecipheriv, pbkdf2Sync } from "crypt
 
 const algorithm = "aes-256-gcm";
 
-const deriveKey = (password, salt = null) => {
+export const deriveKey = (password, salt = null) => {
     if(!salt) {
         salt = randomBytes(16).toString("hex");
     }

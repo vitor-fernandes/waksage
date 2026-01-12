@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { Account } from "../Classes/account.js";
-import { sendMessage } from "./network.js";
+import { createNewGroup, sendMessage } from "./network.js";
 
 const banner = () => {
     console.log("");
@@ -73,6 +73,7 @@ const menuAccountActions = async () => {
         console.log("3 - Add new Friend");
         console.log("4 - Show my Groups");
         console.log("5 - Create a new Group");
+        console.log("6 - Send a message to a Group");
         console.log("8 - Settings");
         console.log("0 - Exit");
 
@@ -87,9 +88,8 @@ const menuAccountActions = async () => {
 
                 break;
             case "2":
-                let friends = global.me.friends;
                 console.log("---> Friend List <---")
-                friends.forEach(friend => {
+                global.me.friends.forEach(friend => {
                     console.log(`  Friend Name: ${friend.name}`);
                     console.log(`  Friend PubKey: ${friend.publicKey}`);
                     console.log("");
@@ -109,6 +109,24 @@ const menuAccountActions = async () => {
                 console.log(`[+] You and ${newFriendName} are now friends [+]\n`)
                 break;
             case "4":
+                console.log("---> Group List <---")
+                let myGroups = await global.me.groups;
+                myGroups.forEach(group => {
+                    console.log(group.toPrint());
+                })
+                console.log("+------------------------------------------------+\n")
+                break;
+            case "5":
+                let newGroupName = await rl.question("Group Name (case sensitive): ");
+                let newGroupMembers = (await rl.question("Members Public Key (separated by ,): ")).split(",");
+                // Include the user itself as a member
+                newGroupMembers.push(global.me.publicKey);
+                await createNewGroup(newGroupName, newGroupMembers);
+                break;
+            case "6":
+                let groupName = await rl.question("Group Name (case sensitive): ");
+                let newMessageContent = await rl.question("Message: ");
+                await sendGroupMessage(groupName, newMessageContent);
                 break;
             case "0":
                 console.log("Bye");

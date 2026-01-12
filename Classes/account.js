@@ -12,6 +12,7 @@ export class Account {
     #friends;
     #publicKey;
     #privateKey;
+    #groups;
     #salt;
     #iv;
     #authTag;
@@ -26,6 +27,7 @@ export class Account {
             this.#name = accountName;
             this.#createdAt = Date.now();
             this.#friends = [];
+            this.#groups = [];
             this.#nonce = 0;
             this.#privateKey = bytesToHex(generatePrivateKey());
             this.#publicKey = bytesToHex(getPublicKey(this.#privateKey));
@@ -45,6 +47,7 @@ export class Account {
             let accountLocation = ACCOUNTS_DIR + accountName + ".json";
             let content = readFromFile(accountLocation);
             let account = JSON.parse(content);
+            console.log(account);
             try {
                 let decryptedData = decrypt(account.privateKey, password, account.salt, account.iv, account.authTag);
 
@@ -52,6 +55,8 @@ export class Account {
                 this.#name = account.name;
                 this.#createdAt = account.createdAt;
                 this.#friends = account.friends;
+                // TODO: create a loop to iterate and load the group objects into array
+                this.#groups = account.groups;
                 this.#nonce = account.nonce;
                 this.#privateKey = decryptedData;
                 this.#publicKey = account.publicKey;
@@ -75,6 +80,10 @@ export class Account {
 
     get friends() {
         return this.#friends;
+    }
+
+    get groups() {
+        return this.#groups;
     }
 
     get nonce() {
@@ -105,8 +114,16 @@ export class Account {
         this.#friends.push(friend);
     }
 
+    joinGroup(group) {
+        this.#groups.push(group)
+    }
+
     getFriend(friendName) {
         return this.#friends.filter(friend => friend.name == friendName)[0];
+    }
+
+    getGroupByName(groupName) {
+        return this.#groups.filter(group => group.name == groupName)[0];
     }
 
     getAccount() {
@@ -126,6 +143,7 @@ export class Account {
             name: this.#name,
             createdAt: this.#createdAt,
             friends: this.#friends,
+            groups: this.#groups,
             nonce: this.#nonce,
             publicKey: this.#publicKey,
             privateKey: this.#privateKey,
@@ -135,6 +153,8 @@ export class Account {
         }
     }
 
+    // TODO: Refactor the saving 
+    // IDEA: Must save all account information encrypted (excluding salt, iv and authTag)
     #saveAccount(encryptedPrivateKey) {
         let newAccount = this.#getAllFieds();
 

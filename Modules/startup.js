@@ -6,6 +6,8 @@ export const configureEnvironment = async() => {
     await startupAccountsDirectory();
     // Start the Waku Node
     global.wakuNode = await startUpNode();
+    // Start the message cache to avoid duplicates
+    global.messageCache = new Set();
 }
 
 export const createDecoderandSubscriber = async() => {

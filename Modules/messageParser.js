@@ -1,31 +1,32 @@
 import { Group } from "../Classes/group.js";
-import { decodeMessage } from "./messages.js";
 import { symmetric } from "@waku/message-encryption/crypto";
 import { hexToBytes } from "@waku/utils/bytes";
+import { printMessage } from "./printer.js";
+import { Message } from "../Classes/message.js";
 
 export const parseReceivedMessage = async (receivedMessage) => {
-    return await decodeMessage(receivedMessage);
+    return new Message(receivedMessage, "", "", true).decode();
 }
 
 export const processReceivedMessage = async (parsedMsg) => {
     try {
-        let timestamp = parsedMsg.timestamp;
-        let from = parsedMsg.from;
+        let date = parsedMsg.date;
 
-        let parsedMessageContent = JSON.parse(parsedMsg.message);
-        let msgType = parsedMessageContent.type;
-        let msg = parsedMessageContent.message;
+        let from = global.me.getFriendNameFromPublicKey(parsedMsg.from);
+
+        let to = parsedMsg.to;
+        let msgType = parsedMsg.type;
+        let msg = parsedMsg.message;
 
         switch(msgType) {
             case "GROUP-INVITE":
                 await processGroupInvite(msg);
                 break;
             case "GROUP-MESSAGE":
-                let groupId = parsedMsg.to
-                let response = await processGroupMessage(groupId, msg, from, timestamp);
-                if(response) {
-                    console.log(response);
-                }
+                await processGroupMessage(to, msg, from, date);
+                break;
+            case "PRIVATE-MESSAGE":
+                await processPrivateMessage(msg, from, date);
                 break;
             default:
                 console.log(`Unsupported msgType: ${msgType}`);
@@ -93,7 +94,7 @@ const processGroupInvite = async (data) => {
     }
 }
 
-const processGroupMessage = async (groupId, data, from ,timestamp) => {
+const processGroupMessage = async (groupId, data, from, date) => {
     let groupInfo = global.me.getGroupById(groupId);
 
     if(!groupInfo) {
@@ -103,19 +104,26 @@ const processGroupMessage = async (groupId, data, from ,timestamp) => {
         // Decrypt Group Message with the Group Secret
         let decryptedContent = Buffer.from(await symmetric.decrypt(hexToBytes(groupInfo.iv), hexToBytes(groupInfo.secret), hexToBytes(data))).toString();
 
-        return {
-            type: "GROUP-MESSAGE",
-            message: {
-                from,
-                group: groupInfo.name,
-                timestamp,
-                content: decryptedContent
-            }
-        };
+        if(global.currentState == "IN-GROUP-CHAT" && global.currentPrivateChat == groupId) {
+            printMessage(from, date, decryptedContent);
+        }
     }
     catch (error) {
         console.error(`Error in ${import.meta.url} - processGroupMessage()`);
         console.error(error);
         return false;
+    }
+}
+
+const processPrivateMessage = async (message, from, date) => {
+    if(global.currentState == "IN-PRIVATE-CHAT" && global.currentPrivateChat == from) {
+        // TODO: Save the message into the database
+        // IDEA: Use the sqlite3 instance to save the date, from, message
+        printMessage(from, date, message);
+    }
+    else if (global.currentState == "IN-ACCOUNT-MENU") {
+        console.log("\n");
+        console.log(`You've received a new message from: ${from}`);
+        console.log("\n");
     }
 }

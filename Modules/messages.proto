@@ -2,15 +2,12 @@ syntax = "proto3";
 
 package waksage;
 
-message MessageBody {
-    string to = 1;
-    string content = 2;
-}
-
 message Message {
     uint64 timestamp = 1;
     string sender = 2;
-    MessageBody body = 3;
+    string to = 3;
+    string type = 4;
+    string body = 5;
 }
 
 message Payload {

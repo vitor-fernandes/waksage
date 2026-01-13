@@ -4,8 +4,10 @@ import { randomUUID } from "crypto";
 import { ACCOUNTS_DIR } from "../Modules/constants.js";
 import { encrypt, decrypt } from "../Modules/crypt.js";
 import { writeToFile, readFromFile } from "../Modules/utils.js";
+import { Group } from "./group.js";
 
 export class Account {
+    // Stored Encrypted
     #id;
     #name;
     #createdAt;
@@ -13,11 +15,15 @@ export class Account {
     #publicKey;
     #privateKey;
     #groups;
+    #nonce;
+
+    // Used For Encrypt / Decrypt
     #salt;
     #iv;
     #authTag;
-    #nonce;
 
+    // Not stored
+    #password;
     #locked = true;
     #unlockedAt = 0;
 
@@ -31,38 +37,64 @@ export class Account {
             this.#nonce = 0;
             this.#privateKey = bytesToHex(generatePrivateKey());
             this.#publicKey = bytesToHex(getPublicKey(this.#privateKey));
-            
+            this.#password = password;
+
+            this.#saveAccount();
+
             this.#locked = false;
             this.#unlockedAt = Date.now();
-
-            let { encryptedData, salt, iv, authTag } = encrypt(this.#privateKey, password);
-
-            this.#salt = salt;
-            this.#iv = iv;
-            this.#authTag = authTag;
-
-            this.#saveAccount(encryptedData);
         }
         else {
+            // TODO: catch the not found error, meaning the user it's trying to access an inexistent account
+            // IDEA: verify the error and handle according to it
             let accountLocation = ACCOUNTS_DIR + accountName + ".json";
-            let content = readFromFile(accountLocation);
-            let account = JSON.parse(content);
-            console.log(account);
+            let encryptedData = readFromFile(accountLocation);
+            let parsedEncryptedData = JSON.parse(encryptedData);
             try {
-                let decryptedData = decrypt(account.privateKey, password, account.salt, account.iv, account.authTag);
+                let decryptedData = decrypt(parsedEncryptedData.data, password, parsedEncryptedData.salt, parsedEncryptedData.iv, parsedEncryptedData.authTag);
 
-                this.#id = account.id;
-                this.#name = account.name;
-                this.#createdAt = account.createdAt;
-                this.#friends = account.friends;
-                // TODO: create a loop to iterate and load the group objects into array
-                this.#groups = account.groups;
-                this.#nonce = account.nonce;
-                this.#privateKey = decryptedData;
-                this.#publicKey = account.publicKey;
-                this.#salt = account.salt;
-                this.#iv = account.iv;
-                this.#authTag = account.authTag;
+                let parsedDecryptedData = JSON.parse(decryptedData);
+
+                console.log(parsedDecryptedData);
+
+                this.#id = parsedDecryptedData.id;
+                this.#name = parsedDecryptedData.name;
+                this.#createdAt = parsedDecryptedData.createdAt;
+                this.#nonce = parsedDecryptedData.nonce;
+                this.#privateKey = parsedDecryptedData.privateKey;
+                this.#publicKey = parsedDecryptedData.publicKey;
+                this.#friends = parsedDecryptedData.friends;
+                this.#password = password;
+                
+                // Initialize the groups as an empty array
+                this.#groups = [];
+                // Create a Group object for each user' group and push into the groups array
+                parsedDecryptedData.groups.forEach(element => {
+                    try {
+                        let parsedElement = JSON.parse(element);
+                        this.#groups.push(
+                            new Group(
+                                parsedElement.id,
+                                parsedElement.name,
+                                parsedElement.members,
+                                parsedElement.iv,
+                                parsedElement.secret,
+                                false
+                            )
+                        );
+                    }
+                    catch (error) {
+                        console.log(`Error trying to parse a group info: ${import.meta.url} - Load Account`);
+                        console.log(error);
+                        process.exit(1);
+                    }
+                    
+                });
+
+                this.#salt = parsedEncryptedData.salt;
+                this.#iv = parsedEncryptedData.iv;
+                this.#authTag = parsedEncryptedData.authTag;
+
                 this.#locked = false;
                 this.#unlockedAt = Date.now();
             }
@@ -108,22 +140,46 @@ export class Account {
 
     incrementNonce() {
         this.#nonce += 1;
+        this.#saveAccount();
     }
 
     addFriend(friend) {
         this.#friends.push(friend);
+        this.#saveAccount();
     }
 
     joinGroup(group) {
-        this.#groups.push(group)
+        this.#groups.push(group);
+        this.#saveAccount();
     }
 
     getFriend(friendName) {
         return this.#friends.filter(friend => friend.name == friendName)[0];
     }
 
-    getFriendNameFromPublicKey(friendPublicKey) {
-        return this.#friends.filter(friend => friend.publicKey == friendPublicKey)[0];
+    getFriendNameFromPublicKey(publicKey) {
+        let friend = this.#friends.filter(friend => friend.publicKey == publicKey)[0]
+        if(friend) {
+            return friend.name;
+        }
+
+        return publicKey;
+    }
+
+    getGroupIdByName(groupName) {
+        let result = this.#groups.filter(group => group.name == groupName)[0];
+        if(result) {
+            return result.id;
+        }
+        return false;
+    }
+
+    getGroupNameById(groupId) {
+        let result = this.#groups.filter(group => group.id == groupId)[0];
+        if(result) {
+            return result.name;
+        }
+        return false;
     }
 
     getGroupByName(groupName) {
@@ -135,43 +191,42 @@ export class Account {
     }
 
     getAccount() {
+        let groupsToString = [];
+        this.#groups.forEach(group => {
+            groupsToString.push(group.toString());
+        });
+
         return {
             id: this.#id,
             name: this.#name,
+            createdAt: this.#createdAt,
             friends: this.#friends,
+            groups: groupsToString,
             publicKey: this.#publicKey,
             privateKey: this.#privateKey,
             nonce: this.#nonce
         };
     }
 
-    #getAllFieds() {
-        return {
-            id: this.#id,
-            name: this.#name,
-            createdAt: this.#createdAt,
-            friends: this.#friends,
-            groups: this.#groups,
-            nonce: this.#nonce,
-            publicKey: this.#publicKey,
-            privateKey: this.#privateKey,
-            salt: this.#salt,
-            iv: this.#iv,
-            authTag: this.#authTag
-        }
+    toString() {
+        return JSON.stringify(this.getAccount());
     }
 
-    // TODO: Refactor the saving 
-    // IDEA: Must save all account information encrypted (excluding salt, iv and authTag)
-    #saveAccount(encryptedPrivateKey) {
-        let newAccount = this.#getAllFieds();
+    #saveAccount() {
+        let { encryptedData, salt, iv, authTag } = encrypt(this.toString(), this.#password);
 
-        newAccount.privateKey = encryptedPrivateKey;
+        this.#salt = salt;
+        this.#iv = iv;
+        this.#authTag = authTag;
 
-        let jsonAccount = JSON.stringify(newAccount, null, 2);
+        let account = {
+            data: encryptedData,
+            iv: this.#iv,
+            salt: this.#salt,
+            authTag: this.#authTag,
+        }
+        let jsonAccount = JSON.stringify(account);
         let newAccountLocation = ACCOUNTS_DIR + this.#name + ".json";
         writeToFile(newAccountLocation, jsonAccount);
-    }
-
-    
+    }   
 }

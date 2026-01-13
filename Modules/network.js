@@ -1,12 +1,12 @@
 import { createLightNode, Protocols} from "@waku/sdk";
-import {CONTENT_TOPIC_PRIV_MSG} from "./constants.js";
+import {CONTENT_TOPIC_PRIV_MSG, MesssageType} from "./constants.js";
 import { createEncoder, createDecoder } from "@waku/message-encryption/ecies";
 import { bytesToHex, hexToBytes } from "@waku/utils/bytes";
-import { createSendMessagePayload } from "./messages.js";
 import { parseReceivedMessage, processReceivedMessage } from "./messageParser.js";
-import { verifyMessageSignature } from "./securityChecker.js";
+import { verifyDuplicateMessage, verifyMessageSignature } from "./securityChecker.js";
 import { Group } from "../Classes/group.js";
 import { symmetric } from "@waku/message-encryption/crypto";
+import { Message } from "../Classes/message.js";
 
 export const startUpNode = async () => {
     console.info("[*] Initializing the Node [*]");
@@ -38,30 +38,26 @@ export const createSubscribers = async () => {
 export const createNewGroup = async (groupName, membersPubKeys) => {
   let newGroup = new Group("", groupName, membersPubKeys, "", "", true);
 
-  // Add group to account
-  await global.me.joinGroup(newGroup);
-
-  console.log(`Group ${newGroup.name} created`);
-
-  // Create the GROUP-INVITE message
-  // Contains all information about the newGroup
-  let messageBody = JSON.stringify({type: "GROUP-INVITE", message: newGroup.toString()});
-
   // Send the invite to each member
   newGroup.members.forEach(member => {
     // Skip the current user
     if(member != global.me.publicKey) {
-      sendMessage(messageBody, member, member);
+      sendMessage(newGroup.toString(), member, member, MesssageType["GROUP-INVITE"]);
     }
   });
+
+  // Add group to account
+  await global.me.joinGroup(newGroup);
+
+  console.log(`Group ${newGroup.name} created`);
 }
 
-export const sendGroupMessage = async (groupName, message) => {
-  let groupInfo = global.me.getGroupByName(groupName);
+export const sendGroupMessage = async (groupInfo, message) => {
+  // let groupInfo = global.me.getGroupByName(groupName);
 
-  if(!groupInfo) {
-    console.log(`The group ${groupName} not found`);
-  }
+  // if(!groupInfo) {
+  //   console.log(`The group ${groupName} not found`);
+  // }
 
   groupInfo.members.forEach(async (member) => {
     // Skip the current user
@@ -74,34 +70,40 @@ export const sendGroupMessage = async (groupName, message) => {
         Buffer.from(message)
       ));
 
-      let messageBody = JSON.stringify({type: "GROUP-MESSAGE", message: encryptedMessage});
       // Don't need to be awaited to send the messages
-      sendMessage(messageBody, groupInfo.id, member)
+      sendMessage(encryptedMessage, groupInfo.id, member, MesssageType["GROUP-MESSAGE"]);
     }
   });
 }
 
-export const sendMessage = async (message, to, receiverPubKey) => {
-    const encoder = createEncoder({
-        contentTopic: CONTENT_TOPIC_PRIV_MSG,
-        publicKey: hexToBytes(receiverPubKey),
-        sigPrivKey: global.me.privateKeyBytes,
-    });
+export const sendMessage = async (message, to, receiverPubKey, type) => {
+  // TODO: Save all sent messages locally
+  // IDEA: create a sqlite3 database to store encrypted (user password or user private key?) all sent messages
+  const encoder = createEncoder({
+    contentTopic: CONTENT_TOPIC_PRIV_MSG,
+    publicKey: hexToBytes(receiverPubKey),
+    sigPrivKey: global.me.privateKeyBytes,
+    ephemeral: true,
+  });
 
-    let serialisedMessage = await createSendMessagePayload(message, to, global.me.publicKeyBytes);
+  let serialisedMessage = new Message(message, to, type, false).encode();
 
-    await global.wakuNode.lightPush.send(encoder, {
-      payload: serialisedMessage,
-    });
-    console.log("Message Sent!");
+  await global.wakuNode.lightPush.send(encoder, {
+    payload: serialisedMessage,
+  });
 }
 
 const onMessageReceived = async(wakuMessage) => {
-  // TODO: Create a mechanism to avoid duplicate messages arriving
-  // IDEA: Calculate a sha256(timestamp_sent|receiverPubKey|contentTopic|sha56(message payload)) and store it in cache before processing the content
-  
+
   if(!wakuMessage) return;
   else if (!wakuMessage.payload) return;
+  else if (!wakuMessage.proto) return;
+
+  let isDuplicateMessage = await verifyDuplicateMessage(wakuMessage);
+  if(isDuplicateMessage) {
+    // If it's a duplicated message just ignore
+    return ;
+  }
 
   let parsedMsg = await parseReceivedMessage(wakuMessage.payload);
   let isValidSignature = await verifyMessageSignature(wakuMessage, parsedMsg);
@@ -110,6 +112,8 @@ const onMessageReceived = async(wakuMessage) => {
     return;
   }
 
+  // TODO: Save all VALID received messages locally
+  // IDEA: create a sqlite3 database to store encrypted (user password or user private key?) all sent messages
   await processReceivedMessage(parsedMsg);
   
 }

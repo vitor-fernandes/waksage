@@ -1,4 +1,4 @@
-import { accessSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'fs';
+import { accessSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { ACCOUNTS_DIR } from './constants.js';
 
 const checkIfAccountsDirectoryExists = () => {

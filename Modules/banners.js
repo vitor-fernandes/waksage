@@ -1,6 +1,8 @@
 import { createInterface } from "node:readline/promises";
 import { Account } from "../Classes/account.js";
 import { createNewGroup, sendMessage, sendGroupMessage } from "./network.js";
+import { printMessage, printBanner, clearLastLine } from "./printer.js";
+import { MesssageType } from "./constants.js";
 
 const banner = () => {
     console.log("");
@@ -19,6 +21,8 @@ const menuCreateOrLoadAccount = async () => {
         input: process.stdin,
         output: process.stdout
     });
+
+    global.currentState = "LOADING-ACCOUNT";
 
     while(currentAccount == "") {
         console.log("Chose an Option: ");
@@ -66,7 +70,9 @@ const menuAccountActions = async () => {
         output: process.stdout
     });
 
-    while(exit == false) {
+    while(!exit) {
+        global.currentState = "IN-ACCOUNT-MENU";
+
         console.log("Chose an Option: ");
         console.log("1 - Send a new message");
         console.log("2 - Show Friends");
@@ -74,7 +80,8 @@ const menuAccountActions = async () => {
         console.log("4 - Show my Groups");
         console.log("5 - Create a new Group");
         console.log("6 - Send a message to a Group");
-        console.log("8 - Settings");
+        console.log("7 - Start a private chat");
+        console.log("8 - Start a group chat");
         console.log("0 - Exit");
 
         let answer = await rl.question(" -> ");
@@ -84,7 +91,9 @@ const menuAccountActions = async () => {
                 let friendPublicKey = await rl.question("To (pubkey): ");
                 let message = await rl.question("Type your message: ");
 
-                await sendMessage(message, friendPublicKey);
+                //let messageBody = JSON.stringify({type: "PRIVATE-MESSAGE", message: message});
+
+                await sendMessage(message, friendPublicKey, friendPublicKey, MesssageType["PRIVATE-MESSAGE"]);
 
                 break;
             case "2":
@@ -121,6 +130,7 @@ const menuAccountActions = async () => {
                 let newGroupMembers = (await rl.question("Members Public Key (separated by ,): ")).split(",");
                 // Include the user itself as a member
                 newGroupMembers.push(global.me.publicKey);
+                
                 await createNewGroup(newGroupName, newGroupMembers);
                 break;
             case "6":
@@ -128,6 +138,84 @@ const menuAccountActions = async () => {
                 let newMessageContent = await rl.question("Message: ");
                 await sendGroupMessage(groupName, newMessageContent);
                 break;
+            case "7":
+                printBanner("Start a new Private Chat");
+                let privateChatUser = await rl.question("Friend Name or Public Key: ");
+                
+                global.currentState = "IN-PRIVATE-CHAT";
+                global.currentPrivateChat = privateChatUser;
+
+                let closePrivateChat = false;
+
+                let privateChatMessage = await rl.question("Message (:exit to quit): ");
+                let privateChatMessageTime = new Date().toLocaleString();
+
+                if(privateChatMessage == ":exit") {
+                    // Instant Stop
+                    break;
+                }
+
+                printBanner(global.me.getFriendNameFromPublicKey(privateChatUser));
+
+                while (!closePrivateChat) {
+                    clearLastLine();
+                    await printMessage(global.me.name, privateChatMessageTime, privateChatMessage);
+
+                    // TODO: check if it's passing a user or public key
+                    // IDEA: Maybe use a regex?
+                    await sendMessage(privateChatMessage, privateChatUser, privateChatUser, MesssageType["PRIVATE-MESSAGE"]);
+
+                    privateChatMessage = await rl.question("Message (:exit to quit): ");
+                    privateChatMessageTime = new Date().toLocaleString();
+
+                    if(privateChatMessage == ":exit") {
+                        closePrivateChat = true;
+                    }
+                }
+                break;
+            
+            case "8":
+                printBanner("Start a Group Chat");
+                let groupChatName = await rl.question("Group Name (case sensitive): ");
+                
+                let group = global.me.getGroupByName(groupChatName);
+                if(!group) {
+                    console.log(`\n\nYou don't participate in the group: ${groupChatName}\n\n`);
+                    break;
+                }
+
+                global.currentState = "IN-GROUP-CHAT";
+                global.currentPrivateChat = group.id;
+
+                let closeGroupChat = false;
+
+                printBanner(groupChatName);
+
+                let groupChatMessage = await rl.question("Message (:exit to quit): ");
+                let groupChatMessageTime = new Date().toLocaleString();
+
+                if(groupChatMessage == ":exit") {
+                    // Instant Stop
+                    break;
+                }
+
+                while (!closeGroupChat) {
+                    clearLastLine();
+                    await printMessage(global.me.name, groupChatMessageTime, groupChatMessage);
+
+                    // TODO: check if it's passing a user or public key
+                    // IDEA: Maybe use a regex?
+                    await sendGroupMessage(group, groupChatMessage);
+
+                    groupChatMessage = await rl.question("");
+                    groupChatMessageTime = new Date().toLocaleString();
+
+                    if(groupChatMessage == ":exit") {
+                        closeGroupChat = true;
+                    }
+                }
+                break;
+            
             case "0":
                 console.log("Bye");
                 exit = true;

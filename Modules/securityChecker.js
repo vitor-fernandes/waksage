@@ -40,7 +40,7 @@ export const verifyMessageSignature = async (rawMessage, parsedMsg) => {
 
     // Verify the signature of the message
     // and check if the message signer is the same of payload 
-    let isValidSignature = rawMessage.verifySignature(hexToBytes(msgFromPubKey)) || msgFromPubKey != msgSignaturePublicKey 
+    let isValidSignature = rawMessage.verifySignature(hexToBytes(msgFromPubKey)) && msgFromPubKey == msgSignaturePublicKey 
     
     if(!isValidSignature) {
         console.log(`[!] WARNING: ${import.meta.url} - verifyMessageSignature() [!]`);

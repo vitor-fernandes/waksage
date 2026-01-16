@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { question } from "readline-sync";
 import { Account } from "../Classes/account.js";
 import { createNewGroup, sendMessage, sendGroupMessage } from "./network.js";
 import { printMessage, printBanner, clearLastLine } from "./printer.js";
@@ -17,11 +18,6 @@ const menuCreateOrLoadAccount = async () => {
     let name;
     let password;
 
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
     global.currentState = "LOADING-ACCOUNT";
 
     while(currentAccount == "") {
@@ -29,35 +25,38 @@ const menuCreateOrLoadAccount = async () => {
         console.log("1 - Create a new Account");
         console.log("2 - Load my account");
 
-        let answer = await rl.question(" -> ");
+
+        // In this menu we can use the readline-sync
+        // As the event loop blocking is not a problem here
+        let answer = question(" -> ");
 
         switch(answer) {
             case "1":
-                name = await rl.question("Account Name: ");
-                password = await rl.question("Account Password: ", {
+                name = question("Account Name: ");
+                password = question("Account Password: ", {
                     hideEchoBack: true
                 });
 
                 currentAccount = new Account(name, password, true);
-                console.log(`[+] New Account Created!: ${currentAccount.name}[+]`);
-                console.log(currentAccount.getAccount());
+                console.log(`[+] New Account Created!: ${currentAccount.name} [+]`);
+                console.log(`Your Public Key: ${currentAccount.publicKey}`);
                 break;
             case "2":
-                name = await rl.question("Account Name: ");
-                password = await rl.question("Account Password: ", {
+                name = question("Account Name: ");
+                password = question("Account Password: ", {
                     hideEchoBack: true
                 });
 
                 currentAccount = new Account(name, password, false);
-                console.log(`[+] Welcome Back ${currentAccount.name}![+]`);
-                console.log(`${currentAccount.publicKey}`)
+                console.log(`[+] Welcome Back ${currentAccount.name}! [+]`);
+                console.log(`Your Public Key: ${currentAccount.publicKey}`)
                 break;
             default:
                 console.log("[-] Incorrect Option [-]\n");
                 break;
         }
     }   
-    rl.close();
+
     global.me = currentAccount;
 
 }
@@ -65,6 +64,9 @@ const menuCreateOrLoadAccount = async () => {
 const menuAccountActions = async () => {
     let exit = false;
 
+
+    // Using the readline due as readline-sync blocks the event loop
+    // so we can't process real-time messages 
     const rl = createInterface({
         input: process.stdin,
         output: process.stdout
@@ -79,9 +81,8 @@ const menuAccountActions = async () => {
         console.log("3 - Add new Friend");
         console.log("4 - Show my Groups");
         console.log("5 - Create a new Group");
-        console.log("6 - Send a message to a Group");
-        console.log("7 - Start a private chat");
-        console.log("8 - Start a group chat");
+        console.log("6 - Start a private chat");
+        console.log("7 - Start a group chat");
         console.log("0 - Exit");
 
         let answer = await rl.question(" -> ");
@@ -90,8 +91,6 @@ const menuAccountActions = async () => {
             case "1":
                 let friendPublicKey = await rl.question("To (pubkey): ");
                 let message = await rl.question("Type your message: ");
-
-                //let messageBody = JSON.stringify({type: "PRIVATE-MESSAGE", message: message});
 
                 await sendMessage(message, friendPublicKey, friendPublicKey, MesssageType["PRIVATE-MESSAGE"]);
 
@@ -134,13 +133,8 @@ const menuAccountActions = async () => {
                 await createNewGroup(newGroupName, newGroupMembers);
                 break;
             case "6":
-                let groupName = await rl.question("Group Name (case sensitive): ");
-                let newMessageContent = await rl.question("Message: ");
-                await sendGroupMessage(groupName, newMessageContent);
-                break;
-            case "7":
                 printBanner("Start a new Private Chat");
-                let privateChatUser = await rl.question("Friend Name or Public Key: ");
+                let privateChatUser = await rl.question("Friend Public Key: ");
                 
                 global.currentState = "IN-PRIVATE-CHAT";
                 global.currentPrivateChat = privateChatUser;
@@ -174,7 +168,7 @@ const menuAccountActions = async () => {
                 }
                 break;
             
-            case "8":
+            case "7":
                 printBanner("Start a Group Chat");
                 let groupChatName = await rl.question("Group Name (case sensitive): ");
                 
@@ -220,11 +214,17 @@ const menuAccountActions = async () => {
                 console.log("Bye");
                 exit = true;
                 break;
+            case "":
+                break;
             default:
+                console.log(answer);
                 console.log("[-] Incorrect Option [-]\n");
                 break;
         }
-    }  
+    }
+
+    rl.close();
+    process.exit(0);
 }
 
 export const accountMenu = async () => {

@@ -17,22 +17,32 @@ export const startUpNode = async () => {
 
     await node.waitForPeers([Protocols.LightPush, Protocols.Filter, Protocols.Store], 10000);
     console.info("[+] Peers Connected [+]");
-
+    
     return node;
 }
 
-export const createSubscribers = async () => {
+const startDecoder = () => {
   // Create an ECIES message decoder with the user' private Key
-  const decoder = await createDecoder(CONTENT_TOPIC_PRIV_MSG, global.me.privateKeyBytes);
+  return createDecoder(CONTENT_TOPIC_PRIV_MSG, global.me.privateKeyBytes);
+}
 
+export const createSubscribers = async () => {
+  let decoder = startDecoder();
   let success = await global.wakuNode.filter.subscribe([decoder], onMessageReceived);
   if(!success) {
     console.error("Error subscribing to the topic: ", success);
+    process.exit(1);
   }
+}
+
+const queryOfflineMessages = async (decoder) => {
+  // let callback = async(message) => {
+  //   console.log("froqueryOfflineMessages.callback: ", parseReceivedMessage(message.payload));
+  // }
   // TODO: Allow users to recover received messages while they were offline
   // Retrieve messages from Store peers
-  //console.log("retrieving msgs from store");
-  //await global.wakuNode.store.queryWithOrderedCallback([decoder], callback);
+  //console.log("[*] Syncing messages (can take a while to finish) [*]");
+  //await global.wakuNode.store.queryWithOrderedCallback([decoder], callback, queryOptions);
 }
 
 export const createNewGroup = async (groupName, membersPubKeys) => {
@@ -53,11 +63,6 @@ export const createNewGroup = async (groupName, membersPubKeys) => {
 }
 
 export const sendGroupMessage = async (groupInfo, message) => {
-  // let groupInfo = global.me.getGroupByName(groupName);
-
-  // if(!groupInfo) {
-  //   console.log(`The group ${groupName} not found`);
-  // }
 
   groupInfo.members.forEach(async (member) => {
     // Skip the current user
@@ -94,7 +99,6 @@ export const sendMessage = async (message, to, receiverPubKey, type) => {
 }
 
 const onMessageReceived = async(wakuMessage) => {
-
   if(!wakuMessage) return;
   else if (!wakuMessage.payload) return;
   else if (!wakuMessage.proto) return;

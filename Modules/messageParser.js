@@ -11,8 +11,8 @@ export const parseReceivedMessage = async (receivedMessage) => {
 export const processReceivedMessage = async (parsedMsg) => {
     try {
         let date = parsedMsg.date;
-
-        let from = global.me.getFriendNameFromPublicKey(parsedMsg.from);
+        let from = parsedMsg.from;
+        let parsedFrom = global.me.getFriendNameFromPublicKey(parsedMsg.from);
 
         let to = parsedMsg.to;
         let msgType = parsedMsg.type;
@@ -20,13 +20,13 @@ export const processReceivedMessage = async (parsedMsg) => {
 
         switch(msgType) {
             case "GROUP-INVITE":
-                await processGroupInvite(msg);
+                await processGroupInvite(parsedFrom, msg);
                 break;
             case "GROUP-MESSAGE":
-                await processGroupMessage(to, msg, from, date);
+                await processGroupMessage(to, msg, parsedFrom, date);
                 break;
             case "PRIVATE-MESSAGE":
-                await processPrivateMessage(msg, from, date);
+                await processPrivateMessage(msg, from, parsedFrom, date);
                 break;
             default:
                 console.log(`Unsupported msgType: ${msgType}`);
@@ -40,7 +40,7 @@ export const processReceivedMessage = async (parsedMsg) => {
     }
 }
 
-const processGroupInvite = async (data) => {
+const processGroupInvite = async (from, data) => {
     try {
         let groupInfo = JSON.parse(data);
 
@@ -84,7 +84,10 @@ const processGroupInvite = async (data) => {
         );
 
         await global.me.joinGroup(newGroupObject);
-        console.log(`[+] You've joined in the ${newGroupObject.name} group [+]`);
+        console.log(`[+] You've joined in a new Group [+]`);
+        console.log(` Invited by: ${from}`);
+        console.log(` Group Name: ${newGroupObject.name}`);
+        console.log("\nPress Enter to enter in menu");
         return true;
     }
     catch (error) {
@@ -107,6 +110,16 @@ const processGroupMessage = async (groupId, data, from, date) => {
         if(global.currentState == "IN-GROUP-CHAT" && global.currentPrivateChat == groupId) {
             printMessage(from, date, decryptedContent);
         }
+
+        else if (global.currentState == "IN-ACCOUNT-MENU") {
+            console.clear();
+            console.log("\n");
+            console.log(`[+] You've received a new Group message [+]`);
+            console.log(` from: ${parsedFrom}`);
+            console.log(` group name: ${groupInfo.name}`);
+            console.log(` message: ${message}`);
+            console.log("\nPress Enter to enter in menu");
+        }
     }
     catch (error) {
         console.error(`Error in ${import.meta.url} - processGroupMessage()`);
@@ -115,15 +128,18 @@ const processGroupMessage = async (groupId, data, from, date) => {
     }
 }
 
-const processPrivateMessage = async (message, from, date) => {
+const processPrivateMessage = async (message, from, parsedFrom, date) => {
     if(global.currentState == "IN-PRIVATE-CHAT" && global.currentPrivateChat == from) {
         // TODO: Save the message into the database
         // IDEA: Use the sqlite3 instance to save the date, from, message
-        printMessage(from, date, message);
+        printMessage(parsedFrom, date, message);
     }
     else if (global.currentState == "IN-ACCOUNT-MENU") {
+        console.clear();
         console.log("\n");
-        console.log(`You've received a new message from: ${from}`);
-        console.log("\n");
+        console.log(`[+] You've received a new message [+]`);
+        console.log(` from: ${parsedFrom}`);
+        console.log(` message: ${message}`);
+        console.log("\nPress Enter to enter in menu");
     }
 }

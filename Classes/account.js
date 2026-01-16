@@ -55,8 +55,6 @@ export class Account {
 
                 let parsedDecryptedData = JSON.parse(decryptedData);
 
-                console.log(parsedDecryptedData);
-
                 this.#id = parsedDecryptedData.id;
                 this.#name = parsedDecryptedData.name;
                 this.#createdAt = parsedDecryptedData.createdAt;
